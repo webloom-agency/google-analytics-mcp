@@ -190,6 +190,39 @@ else:
 
 
 # ---- Build routes and app ----
+class _McpAuthDiagnostic:
+    """Pure pass-through ASGI wrapper that logs whether /mcp requests carry an
+    Authorization header. Does not touch the request/response streams, so it is
+    safe for the streaming (SSE) MCP transport. Purely diagnostic.
+    """
+
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope.get("type") == "http" and scope.get("path", "").startswith("/mcp"):
+            headers = {
+                k.decode("latin-1").lower(): v.decode("latin-1")
+                for k, v in scope.get("headers", [])
+            }
+            auth = headers.get("authorization", "")
+            method = scope.get("method")
+            if auth:
+                scheme = auth.split(" ", 1)[0]
+                logger.info(
+                    "DIAG /mcp %s: Authorization header PRESENT (scheme=%s)",
+                    method,
+                    scheme,
+                )
+            else:
+                logger.info(
+                    "DIAG /mcp %s: NO Authorization header. Client sent headers=[%s]",
+                    method,
+                    ", ".join(sorted(headers.keys())),
+                )
+        await self.app(scope, receive, send)
+
+
 async def _protected_resource_metadata(request: Request):
     """Advertise the MCP endpoint (/mcp) as the canonical protected resource.
 
@@ -230,7 +263,7 @@ def _create_app():
                 methods=["GET"],
             ),
         )
-        return mcp_app
+        return _McpAuthDiagnostic(mcp_app)
 
     if MCP_ENABLE_OAUTH21 and not _auth_provider:
         logger.warning(
