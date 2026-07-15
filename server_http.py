@@ -190,11 +190,46 @@ else:
 
 
 # ---- Build routes and app ----
+async def _protected_resource_metadata(request: Request):
+    """Advertise the MCP endpoint (/mcp) as the canonical protected resource.
+
+    FastMCP's built-in Protected Resource Metadata advertises the server *root*
+    (e.g. https://host/). Strict MCP clients (per the MCP authorization spec)
+    require the metadata `resource` to equal the server URL they connect to
+    (https://host/mcp); when it doesn't match they treat the token as not
+    applicable and never send it, so /mcp returns 401 even after a successful
+    login. Serving this at the origin .well-known path (where the client and
+    the WWW-Authenticate header point) with the /mcp resource fixes that.
+    """
+    from auth.oauth_config import get_oauth_config
+    base = get_oauth_config().get_oauth_base_url().rstrip("/")
+    return JSONResponse(
+        {
+            "resource": f"{base}/mcp",
+            "authorization_servers": [f"{base}/"],
+            "scopes_supported": SCOPES,
+            "bearer_methods_supported": ["header"],
+        },
+        headers={"Cache-Control": "no-store"},
+    )
+
+
 def _create_app():
     """Build the Starlette app with appropriate routes and middleware."""
     mcp_app = mcp.http_app()
 
     if MCP_ENABLE_OAUTH21 and _auth_provider:
+        # Override the Protected Resource Metadata so it advertises /mcp as the
+        # resource (see handler docstring). Inserting first gives it precedence
+        # over FastMCP's built-in root-resource route at the same path.
+        mcp_app.router.routes.insert(
+            0,
+            Route(
+                "/.well-known/oauth-protected-resource",
+                _protected_resource_metadata,
+                methods=["GET"],
+            ),
+        )
         return mcp_app
 
     if MCP_ENABLE_OAUTH21 and not _auth_provider:
