@@ -55,6 +55,14 @@ venv/
 # pyenv
 .python-version
 
+# GA4 OAuth server: per-user Google tokens, MCP OAuth state, secrets
+service_account_credentials.json
+client_secret*.json
+ga4_token.json
+.credentials/
+data/
+mcp_oauth/
+
 # Test logs
 coverage.xml
 *sponge_log.xml

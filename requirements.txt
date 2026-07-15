@@ -1,0 +1,10 @@
+google-analytics-data>=0.18.0
+google-analytics-admin>=0.23.0
+google-auth>=2.0.0
+google-auth-oauthlib>=1.2.1
+fastmcp==2.11.3
+starlette>=0.37
+uvicorn>=0.30
+aiohttp>=3.9.0
+PyJWT[crypto]>=2.8.0
+pydantic>=2.0.0
