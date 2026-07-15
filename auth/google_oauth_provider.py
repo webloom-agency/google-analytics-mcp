@@ -175,12 +175,48 @@ class GoogleOAuthProvider(OAuthProvider):
     async def _persist_oauth_state(self) -> None:
         await asyncio.to_thread(self._persist_oauth_state_sync)
 
+    def _merge_state_from_disk(self) -> None:
+        """Merge persisted OAuth state into memory without clobbering newer entries.
+
+        Needed when the server runs more than one worker process: a client
+        registration or token minted by one worker lives only in that worker's
+        in-memory dicts plus the shared on-disk state. A sibling worker (which
+        only loaded state at startup) must reconcile from disk on a cache miss,
+        otherwise it rejects tokens/clients it never saw. Harmless for a single
+        worker (it simply finds nothing new).
+        """
+        if not self._oauth_persist:
+            return
+        try:
+            with self._oauth_state_lock:
+                raw = _oauth_state_store.read_mcp_oauth_state(self._oauth_state_path)
+                if not raw:
+                    return
+                clients, access_tokens, refresh_tokens, token_to_email = (
+                    _oauth_state_store.deserialize_state(raw)
+                )
+                for k, v in clients.items():
+                    self.clients.setdefault(k, v)
+                for k, v in access_tokens.items():
+                    self.access_tokens.setdefault(k, v)
+                for k, v in refresh_tokens.items():
+                    self.refresh_tokens.setdefault(k, v)
+                for k, v in token_to_email.items():
+                    self.token_to_email.setdefault(k, v)
+        except Exception as e:
+            logger.debug("Could not merge OAuth state from disk: %s", e)
+
     # ------------------------------------------------------------------
     # Client registration
     # ------------------------------------------------------------------
 
     async def get_client(self, client_id: str) -> Optional[OAuthClientInformationFull]:
-        return self.clients.get(client_id)
+        client = self.clients.get(client_id)
+        if client is None:
+            # Another worker may have handled /register.
+            self._merge_state_from_disk()
+            client = self.clients.get(client_id)
+        return client
 
     async def register_client(self, client_info: OAuthClientInformationFull) -> None:
         self.clients[client_info.client_id] = client_info
@@ -578,6 +614,10 @@ class GoogleOAuthProvider(OAuthProvider):
     async def load_access_token(self, token: str) -> Optional[AccessToken]:
         at = self.access_tokens.get(token)
         if not at:
+            # Another worker may have minted this token after our startup.
+            self._merge_state_from_disk()
+            at = self.access_tokens.get(token)
+        if not at:
             prefix = token[:12] if len(token) > 12 else token
             logger.warning(
                 "load_access_token: token NOT FOUND prefix=%s, "
@@ -631,4 +671,8 @@ class GoogleOAuthProvider(OAuthProvider):
     # ------------------------------------------------------------------
 
     def get_user_email(self, token: str) -> Optional[str]:
-        return self.token_to_email.get(token)
+        email = self.token_to_email.get(token)
+        if email is None:
+            self._merge_state_from_disk()
+            email = self.token_to_email.get(token)
+        return email

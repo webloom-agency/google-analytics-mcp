@@ -3,7 +3,13 @@ google-analytics-admin>=0.23.0
 google-auth>=2.0.0
 google-auth-oauthlib>=1.2.1
 fastmcp==2.11.3
-starlette>=0.37
+# Pin the transport stack to the versions fastmcp 2.11.3 was built against
+# (mcp>=1.12.4,<2.0.0 is its declared range; 1.12.4 is the floor it targets).
+# Letting `mcp`/`starlette` float to their 2026 latest pulls an untested combo
+# (mcp 1.28+, starlette 1.x) whose session/auth behavior returns 401 on /mcp
+# after an otherwise-successful OAuth login.
+mcp==1.12.4
+starlette>=0.37,<1.0
 uvicorn>=0.30
 aiohttp>=3.9.0
 PyJWT[crypto]>=2.8.0
