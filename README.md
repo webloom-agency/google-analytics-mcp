@@ -1,207 +1,214 @@
-# Google Analytics MCP Server (Experimental)
+# Google Analytics 4 (GA4) MCP Server — remote, multi‑user, OAuth 2.1
 
-[![PyPI version](https://img.shields.io/pypi/v/analytics-mcp.svg)](https://pypi.org/project/analytics-mcp/)
-[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
-[![GitHub branch check runs](https://img.shields.io/github/check-runs/googleanalytics/google-analytics-mcp/main)](https://github.com/googleanalytics/google-analytics-mcp/actions?query=branch%3Amain++)
-[![PyPI - Downloads](https://img.shields.io/pypi/dm/analytics-mcp)](https://pypi.org/project/analytics-mcp/)
-[![GitHub stars](https://img.shields.io/github/stars/googleanalytics/google-analytics-mcp?style=social)](https://github.com/googleanalytics/google-analytics-mcp/stargazers)
-[![GitHub forks](https://img.shields.io/github/forks/googleanalytics/google-analytics-mcp?style=social)](https://github.com/googleanalytics/google-analytics-mcp/network/members)
-[![YouTube Video Views](https://img.shields.io/youtube/views/PT4wGPxWiRQ)](https://www.youtube.com/watch?v=PT4wGPxWiRQ)
+**🌐 Languages:** **English** · [Français](README.fr.md)
 
-This repo contains the source code for running a local
-[MCP](https://modelcontextprotocol.io) server that interacts with APIs for
-[Google Analytics](https://support.google.com/analytics).
+A hosted [Model Context Protocol](https://modelcontextprotocol.io) server for
+**Google Analytics 4**. Unlike the official local server, this one is built to
+run **remotely for multiple users**: each person signs in with their **own
+Google account** through a browser (OAuth 2.1), and their login is **persisted
+server‑side** so they don't have to re‑authenticate on every restart.
 
-Join the discussion and ask questions in the
-[🤖-analytics-mcp channel](https://discord.com/channels/971845904002871346/1398002598665257060)
-on Discord.
+It works with **any MCP‑capable client** — ChatGPT, Claude, Cursor, and more —
+because MCP is a transport standard, not a model. The LLM never sees your Google
+credentials; the server holds them and returns plain results.
+
+Built and maintained by [Webloom](https://webloom.fr). 🌱
+
+---
+
+## How it differs from the official Google server
+
+| | Official `analytics-mcp` | This server |
+|---|---|---|
+| Transport | Local `stdio` (one machine) | Remote **Streamable HTTP** (`/mcp`) |
+| Auth | Application Default Credentials (single identity) | **OAuth 2.1 per user**, each with their own Google login |
+| Users | One developer, one laptop | **Multi‑user**, hosted |
+| Persistence | none | Refresh tokens persisted on disk (survive restarts) |
+| Clients documented | Gemini, Claude Code | **ChatGPT, Claude, Cursor** (+ any MCP client) |
+
+---
 
 ## Tools 🛠️
 
-The server uses the
+Powered by the
 [Google Analytics Admin API](https://developers.google.com/analytics/devguides/config/admin/v1)
 and
-[Google Analytics Data API](https://developers.google.com/analytics/devguides/reporting/data/v1)
-to provide several
-[Tools](https://modelcontextprotocol.io/docs/concepts/tools) for use with LLMs.
+[Data API](https://developers.google.com/analytics/devguides/reporting/data/v1).
 
-### Retrieve account and property information 🟠
+| Tool | What it does |
+|---|---|
+| `get_account_summaries` | List every GA4 account + property you can access. |
+| `find_property_by_domain` | **Find the property id from a domain or URL** (e.g. `webloom.fr`). Matches against each property's web data‑stream URL. |
+| `get_property_details` | Details for one property (time zone, currency, industry…). |
+| `list_google_ads_links` | Google Ads links for a property. |
+| `get_custom_dimensions_and_metrics` | Custom dimensions/metrics defined on a property. |
+| `run_report` | The main analytics tool — pick dimensions + metrics over a date range. Rich built‑in examples for traffic, channels, landing pages, revenue, events… |
+| `run_realtime_report` | Live report over the last ~30 minutes. |
 
-- `get_account_summaries`: Retrieves information about the user's Google
-  Analytics accounts and properties.
-- `get_property_details`: Returns details about a property.
-- `list_google_ads_links`: Returns a list of links to Google Ads accounts for
-  a property.
+> Don't know a site's property id? Just ask in natural language — e.g.
+> *"what were the top channels for webloom.fr last month?"* — and the assistant
+> will call `find_property_by_domain` then `run_report` for you.
 
-### Run core reports 📙
+---
 
-- `run_report`: Runs a Google Analytics report using the Data API.
-- `run_funnel_report`: Runs a Google Analytics funnel report using the Data API.
-- `get_custom_dimensions_and_metrics`: Retrieves the custom dimensions and
-  metrics for a specific property.
+## Connect your MCP client 🔌
 
-### Run realtime reports ⏳
-
-- `run_realtime_report`: Runs a Google Analytics realtime report using the
-  Data API.
-
-## Setup instructions 🔧
-
-✨ Watch the [Google Analytics MCP Setup
-Tutorial](https://youtu.be/nS8HLdwmVlY) on YouTube for a step-by-step
-walkthrough of these instructions.
-
-[![Watch the video](https://img.youtube.com/vi/nS8HLdwmVlY/mqdefault.jpg)](https://www.youtube.com/watch?v=nS8HLdwmVlY)
-
-Setup involves the following steps:
-
-1.  Configure Python.
-1.  Configure credentials for Google Analytics.
-1.  Configure Gemini.
-
-### Configure Python 🐍
-
-[Install pipx](https://pipx.pypa.io/stable/#install-pipx).
-
-### Enable APIs in your project ✅
-
-[Follow the instructions](https://support.google.com/googleapi/answer/6158841)
-to enable the following APIs in your Google Cloud project:
-
-- [Google Analytics Admin API](https://console.cloud.google.com/apis/library/analyticsadmin.googleapis.com)
-- [Google Analytics Data API](https://console.cloud.google.com/apis/library/analyticsdata.googleapis.com)
-
-### Configure credentials 🔑
-
-Configure your [Application Default Credentials
-(ADC)](https://cloud.google.com/docs/authentication/provide-credentials-adc).
-Make sure the credentials are for a user with access to your Google Analytics
-accounts or properties.
-
-Credentials must include the Google Analytics read-only scope:
+You need the server's MCP URL, which ends in **`/mcp`**:
 
 ```
-https://www.googleapis.com/auth/analytics.readonly
+https://YOUR-SERVER.onrender.com/mcp
 ```
 
-Check out
-[Manage OAuth Clients](https://support.google.com/cloud/answer/15549257)
-for how to create an OAuth client.
+The first time you connect, a browser window opens: **sign in with the Google
+account that has access to your GA4 properties** and approve the read‑only
+Analytics scope. That's it — your login is remembered afterwards.
 
-Here are some sample `gcloud` commands you might find useful:
+### Cursor
 
-- Set up ADC using user credentials and an OAuth desktop or web client after
-  downloading the client JSON to `YOUR_CLIENT_JSON_FILE`.
+Add the server to your MCP config — either the project file `.cursor/mcp.json`
+or the global `~/.cursor/mcp.json`:
 
-  ```shell
-  gcloud auth application-default login \
-    --scopes https://www.googleapis.com/auth/analytics.readonly,https://www.googleapis.com/auth/cloud-platform \
-    --client-id-file=YOUR_CLIENT_JSON_FILE
-  ```
-
-- Set up ADC using service account impersonation.
-
-  ```shell
-  gcloud auth application-default login \
-    --impersonate-service-account=SERVICE_ACCOUNT_EMAIL \
-    --scopes=https://www.googleapis.com/auth/analytics.readonly,https://www.googleapis.com/auth/cloud-platform
-  ```
-
-When the `gcloud auth application-default` command completes, copy the
-`PATH_TO_CREDENTIALS_JSON` file location printed to the console in the
-following message. You'll need this for the next step!
-
-```
-Credentials saved to file: [PATH_TO_CREDENTIALS_JSON]
-```
-
-### Configure Gemini
-
-1.  Install [Gemini
-    CLI](https://github.com/google-gemini/gemini-cli/blob/main/docs/get-started/installation.md)
-    or [Gemini Code
-    Assist](https://marketplace.visualstudio.com/items?itemName=Google.geminicodeassist).
-
-1.  Create or edit the file at `~/.gemini/settings.json`, adding your server
-    to the `mcpServers` list.
-
-    Replace `PATH_TO_CREDENTIALS_JSON` with the path you copied in the previous
-    step.
-
-    We also recommend that you add a `GOOGLE_CLOUD_PROJECT` attribute to the
-    `env` object. Replace `YOUR_PROJECT_ID` in the following example with the
-    [project ID](https://support.google.com/googleapi/answer/7014113) of your
-    Google Cloud project.
-
-    ```json
-    {
-      "mcpServers": {
-        "analytics-mcp": {
-          "command": "pipx",
-          "args": ["run", "analytics-mcp"],
-          "env": {
-            "GOOGLE_APPLICATION_CREDENTIALS": "PATH_TO_CREDENTIALS_JSON",
-            "GOOGLE_PROJECT_ID": "YOUR_PROJECT_ID"
-          }
-        }
-      }
+```json
+{
+  "mcpServers": {
+    "google-analytics": {
+      "url": "https://YOUR-SERVER.onrender.com/mcp"
     }
-    ```
+  }
+}
+```
 
-### Configure Claude Code
+Then open **Settings → Tools & MCP**, confirm `google-analytics` is listed, and
+click to **authenticate** when prompted. Once it turns green, ask Cursor an
+analytics question.
 
-1.  Add the MCP server with the following command:
+### Claude
 
-    Replace `PATH_TO_CREDENTIALS_JSON` with the path you copied in the previous
-    step, and replace `YOUR_PROJECT_ID` with the
-    [project ID](https://support.google.com/googleapi/answer/7014113) of your
-    Google Cloud project.
+**Claude Desktop / claude.ai** (requires a plan that supports custom
+connectors):
 
-    ```shell
-    claude mcp add analytics-mcp \
-      --scope user \
-      -e "GOOGLE_APPLICATION_CREDENTIALS=PATH_TO_CREDENTIALS_JSON" \
-      -e "GOOGLE_PROJECT_ID=YOUR_PROJECT_ID" \
-      -- pipx run analytics-mcp
-    ```
+1. **Settings → Connectors → Add custom connector**.
+2. Name it `Google Analytics` and paste the URL
+   `https://YOUR-SERVER.onrender.com/mcp`.
+3. Click **Connect** and complete the Google sign‑in.
+
+**Claude Code (CLI):**
+
+```shell
+claude mcp add --transport http google-analytics https://YOUR-SERVER.onrender.com/mcp
+```
+
+Run `/mcp` inside Claude Code to trigger authentication.
+
+### ChatGPT
+
+Requires a plan with **connectors / developer mode** (Plus, Pro, Business, or
+Enterprise):
+
+1. **Settings → Connectors** (enable **Developer mode** under Advanced if
+   needed).
+2. **Create / Add custom connector** → give it a name and paste the MCP server
+   URL `https://YOUR-SERVER.onrender.com/mcp`.
+3. Save, then **authenticate** with your Google account.
+4. In a chat, enable the connector and ask your GA4 question.
+
+---
 
 ## Try it out 🥼
 
-Launch Gemini Code Assist or Gemini CLI and type `/mcp`. You should see
-`analytics-mcp` listed in the results.
+Once connected, ask natural‑language questions:
 
-Here are some sample prompts to get you started:
+```
+What can the Google Analytics server do?
+```
 
-- Ask what the server can do:
+```
+Find the GA4 property for webloom.fr.
+```
 
-  ```
-  what can the analytics-mcp server do?
-  ```
+```
+What were the top acquisition channels for webloom.fr over the last 28 days?
+```
 
-- Ask about a Google Analytics property
+```
+Show daily active users and sessions for property 123456789 for the last 7 days.
+```
 
-  ```
-  Give me details about my Google Analytics property with 'xyz' in the name
-  ```
+```
+What are the most popular events in my property over the last 180 days?
+```
 
-- Prompt for analysis:
+```
+How many users are on the site right now, by country?
+```
 
-  ```
-  what are the most popular events in my Google Analytics property in the last 180 days?
-  ```
+---
 
-- Ask about signed-in users:
+## Self‑hosting (Render) 🚀
 
-  ```
-  were most of my users in the last 6 months logged in?
-  ```
+The server is a standard Python ASGI app; any host works. Below is the Render
+setup it's designed for.
 
-- Ask about property configuration:
+### 1. Google Cloud setup
 
-  ```
-  what are the custom dimensions and custom metrics in my property?
-  ```
+1. Create/select a Google Cloud project.
+2. Enable both APIs:
+   [Analytics Admin API](https://console.cloud.google.com/apis/library/analyticsadmin.googleapis.com)
+   and
+   [Analytics Data API](https://console.cloud.google.com/apis/library/analyticsdata.googleapis.com).
+3. Configure the **OAuth consent screen** and add the scope
+   `https://www.googleapis.com/auth/analytics.readonly`. While in *Testing*, add
+   each user under **Test users**.
+4. Create an OAuth **Web application** client. Add the authorized redirect URI:
+   `https://YOUR-SERVER.onrender.com/oauth2callback`.
 
-## Contributing ✨
+### 2. Render service
+
+- **Build command:** `pip install -r requirements.txt`
+- **Start command:** `uvicorn server_http:app --host 0.0.0.0 --port $PORT`
+- **Add a persistent disk** mounted at **`/data`** (holds per‑user Google
+  credentials + OAuth state so logins survive restarts).
+
+### 3. Environment variables
+
+| Variable | Value |
+|---|---|
+| `MCP_ENABLE_OAUTH21` | `true` |
+| `GOOGLE_OAUTH_CLIENT_ID` | your OAuth web client id |
+| `GOOGLE_OAUTH_CLIENT_SECRET` | your OAuth web client secret |
+| `GA4_EXTERNAL_URL` | `https://YOUR-SERVER.onrender.com` (public HTTPS URL, no trailing slash) |
+| `GOOGLE_MCP_CREDENTIALS_DIR` | `/data` |
+
+Deploy, then point your client at `https://YOUR-SERVER.onrender.com/mcp`.
+
+### Local use (single user, stdio)
+
+For a quick local run without the OAuth server, provide a pre‑authorized token
+or a service account and run:
+
+```shell
+pip install -r requirements.txt
+python ga4_server.py
+```
+
+See `ga4_server.py` for the credential lookup order (`GA4_OAUTH_TOKEN_PATH`,
+service account file, etc.).
+
+---
+
+## Security notes 🔒
+
+- The LLM/client never receives your Google credentials — they stay server‑side.
+- Refresh tokens and OAuth state live under `/data` with restrictive
+  permissions; keep that disk private and never commit credential files.
+- If you run **without** OAuth 2.1 and **without** a bearer token, the `/mcp`
+  endpoint is unauthenticated — the server logs a loud warning on startup. For
+  any remote deployment, keep `MCP_ENABLE_OAUTH21=true`.
+
+---
+
+## Credits
+
+Made with care by [**Webloom**](https://webloom.fr) — [webloom.fr](https://webloom.fr).
 
 Contributions welcome! See the [Contributing Guide](CONTRIBUTING.md).
