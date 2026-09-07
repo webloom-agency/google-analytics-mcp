@@ -44,7 +44,7 @@ et l'
 | `get_property_details` | Détails d'une propriété (fuseau horaire, devise, secteur…). |
 | `list_google_ads_links` | Liens Google Ads d'une propriété. |
 | `get_custom_dimensions_and_metrics` | Dimensions et métriques personnalisées d'une propriété. |
-| `run_report` | L'outil d'analyse principal — choisissez dimensions + métriques sur une période. De nombreux exemples intégrés : trafic, canaux, pages de destination, revenus, événements… |
+| `run_report` | L'outil d'analyse principal — dimensions + métriques sur une période. Filtres optionnels style GSC (`filter_dimension` / `filter_operator` / `filter_expression`, + `filter2_*` en AND). Exemples intégrés : trafic, canaux, landing pages, revenus, événements… |
 | `run_realtime_report` | Rapport en temps réel (≈ 30 dernières minutes). |
 
 > Vous ne connaissez pas l'identifiant de propriété d'un site ? Demandez

@@ -42,7 +42,7 @@ and
 | `get_property_details` | Details for one property (time zone, currency, industry…). |
 | `list_google_ads_links` | Google Ads links for a property. |
 | `get_custom_dimensions_and_metrics` | Custom dimensions/metrics defined on a property. |
-| `run_report` | The main analytics tool — pick dimensions + metrics over a date range. Rich built‑in examples for traffic, channels, landing pages, revenue, events… |
+| `run_report` | The main analytics tool — pick dimensions + metrics over a date range. Supports optional GSC-style filters (`filter_dimension` / `filter_operator` / `filter_expression`, plus optional `filter2_*` AND). Rich built‑in examples for traffic, channels, landing pages, revenue, events… |
 | `run_realtime_report` | Live report over the last ~30 minutes. |
 
 > Don't know a site's property id? Just ask in natural language — e.g.

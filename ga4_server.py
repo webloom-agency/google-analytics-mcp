@@ -16,6 +16,9 @@ from google.analytics.data_v1beta import BetaAnalyticsDataClient
 from google.analytics.data_v1beta.types import (
     DateRange,
     Dimension,
+    Filter,
+    FilterExpression,
+    FilterExpressionList,
     Metric,
     RunReportRequest,
     RunRealtimeReportRequest,
@@ -168,6 +171,88 @@ def _normalize_property(property_id: str) -> str:
     if pid.startswith("properties/"):
         return pid
     return f"properties/{pid}"
+
+
+def _string_match_type(operator: str) -> "Filter.StringFilter.MatchType":
+    """Map GSC-style operator names onto GA4 StringFilter match types."""
+    op = (operator or "contains").strip().lower().replace("-", "_")
+    mapping = {
+        "contains": Filter.StringFilter.MatchType.CONTAINS,
+        "equals": Filter.StringFilter.MatchType.EXACT,
+        "exact": Filter.StringFilter.MatchType.EXACT,
+        "begins_with": Filter.StringFilter.MatchType.BEGINS_WITH,
+        "beginswith": Filter.StringFilter.MatchType.BEGINS_WITH,
+        "ends_with": Filter.StringFilter.MatchType.ENDS_WITH,
+        "endswith": Filter.StringFilter.MatchType.ENDS_WITH,
+        "full_regexp": Filter.StringFilter.MatchType.FULL_REGEXP,
+        "partial_regexp": Filter.StringFilter.MatchType.PARTIAL_REGEXP,
+    }
+    if op not in mapping:
+        raise ValueError(
+            f"Unsupported filter_operator '{operator}'. "
+            "Use contains, equals, begins_with, ends_with, full_regexp, "
+            "partial_regexp, notContains, or notEquals."
+        )
+    return mapping[op]
+
+
+def _dimension_filter_expr(
+    dimension: Optional[str],
+    operator: Optional[str],
+    expression: Optional[str],
+) -> Optional[FilterExpression]:
+    """Build a single GA4 dimension FilterExpression (or None if unused)."""
+    dim = (dimension or "").strip()
+    expr = "" if expression is None else str(expression).strip()
+    if not dim or not expr:
+        return None
+    op = (operator or "contains").strip().lower().replace("-", "_")
+    if op in ("notcontains", "not_contains", "does_not_contain"):
+        return FilterExpression(
+            not_expression=FilterExpression(
+                filter=Filter(
+                    field_name=dim,
+                    string_filter=Filter.StringFilter(
+                        match_type=Filter.StringFilter.MatchType.CONTAINS,
+                        value=expr,
+                    ),
+                )
+            )
+        )
+    if op in ("notequals", "not_equals", "does_not_equal"):
+        return FilterExpression(
+            not_expression=FilterExpression(
+                filter=Filter(
+                    field_name=dim,
+                    string_filter=Filter.StringFilter(
+                        match_type=Filter.StringFilter.MatchType.EXACT,
+                        value=expr,
+                    ),
+                )
+            )
+        )
+    return FilterExpression(
+        filter=Filter(
+            field_name=dim,
+            string_filter=Filter.StringFilter(
+                match_type=_string_match_type(op),
+                value=expr,
+            ),
+        )
+    )
+
+
+def _and_dimension_filters(
+    *filters: Optional[FilterExpression],
+) -> Optional[FilterExpression]:
+    present = [f for f in filters if f is not None]
+    if not present:
+        return None
+    if len(present) == 1:
+        return present[0]
+    return FilterExpression(
+        and_group=FilterExpressionList(expressions=present)
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -531,6 +616,12 @@ async def run_report(
     row_limit: int = 100,
     order_by_metric: Optional[str] = None,
     descending: bool = True,
+    filter_dimension: Optional[str] = None,
+    filter_operator: str = "contains",
+    filter_expression: Optional[str] = None,
+    filter2_dimension: Optional[str] = None,
+    filter2_operator: str = "contains",
+    filter2_expression: Optional[str] = None,
 ) -> str:
     """Run a core GA4 report via the Data API. This is the primary,
     general-purpose analytics tool: you pick dimensions (how to break the data
@@ -563,6 +654,18 @@ async def run_report(
             Great for "top N" questions. Leave unset to keep GA4's default order.
         descending: Sort direction when order_by_metric is set (default True =
             highest first).
+        filter_dimension: Optional dimension to filter on (e.g. landingPage,
+            pagePath, sessionDefaultChannelGroup). GSC-style companion to
+            filter_operator / filter_expression.
+        filter_operator: Match type for filter_dimension (contains, equals,
+            begins_with, ends_with, notContains, notEquals, full_regexp,
+            partial_regexp). Default contains.
+        filter_expression: Value for filter_dimension (e.g. "/homme" or
+            "Organic Search").
+        filter2_dimension: Optional second dimension filter (AND with the first).
+        filter2_operator: Match type for filter2_dimension (same set as
+            filter_operator).
+        filter2_expression: Value for filter2_dimension.
 
     Examples:
         - Traffic trend (last 28 days, daily):
@@ -570,6 +673,16 @@ async def run_report(
         - Top channels by sessions:
           dimensions="sessionDefaultChannelGroup", metrics="sessions,engagedSessions",
           order_by_metric="sessions"
+        - Organic sessions for landings containing /homme:
+          dimensions="sessionDefaultChannelGroup", metrics="sessions,conversions",
+          filter_dimension="landingPage", filter_operator="contains",
+          filter_expression="/homme"
+        - Organic + URL path (totals only):
+          dimensions="", metrics="sessions,conversions",
+          filter_dimension="sessionDefaultChannelGroup", filter_operator="equals",
+          filter_expression="Organic Search",
+          filter2_dimension="landingPage", filter2_operator="contains",
+          filter2_expression="/femme"
         - Top landing pages last 7 days:
           dimensions="landingPage", metrics="sessions,bounceRate",
           start_date="7daysAgo", order_by_metric="sessions", row_limit=25
@@ -606,6 +719,15 @@ async def run_report(
                 )
             ]
 
+        dimension_filter = _and_dimension_filters(
+            _dimension_filter_expr(
+                filter_dimension, filter_operator, filter_expression
+            ),
+            _dimension_filter_expr(
+                filter2_dimension, filter2_operator, filter2_expression
+            ),
+        )
+
         request = RunReportRequest(
             property=_normalize_property(property_id),
             dimensions=[Dimension(name=d) for d in dimension_list],
@@ -613,6 +735,7 @@ async def run_report(
             date_ranges=[DateRange(start_date=start_date, end_date=end_date)],
             limit=int(row_limit),
             order_bys=order_bys,
+            dimension_filter=dimension_filter,
         )
         response = await asyncio.to_thread(lambda: client.run_report(request))
         return _render_report(
