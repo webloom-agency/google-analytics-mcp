@@ -728,15 +728,20 @@ async def run_report(
             ),
         )
 
-        request = RunReportRequest(
-            property=_normalize_property(property_id),
-            dimensions=[Dimension(name=d) for d in dimension_list],
-            metrics=[Metric(name=m) for m in metric_list],
-            date_ranges=[DateRange(start_date=start_date, end_date=end_date)],
-            limit=int(row_limit),
-            order_bys=order_bys,
-            dimension_filter=dimension_filter,
-        )
+        # Build request exactly as before when no filters are set — do not pass
+        # dimension_filter=None (keeps protobuf payload identical for legacy callers).
+        request_kwargs: Dict[str, Any] = {
+            "property": _normalize_property(property_id),
+            "dimensions": [Dimension(name=d) for d in dimension_list],
+            "metrics": [Metric(name=m) for m in metric_list],
+            "date_ranges": [DateRange(start_date=start_date, end_date=end_date)],
+            "limit": int(row_limit),
+            "order_bys": order_bys,
+        }
+        if dimension_filter is not None:
+            request_kwargs["dimension_filter"] = dimension_filter
+
+        request = RunReportRequest(**request_kwargs)
         response = await asyncio.to_thread(lambda: client.run_report(request))
         return _render_report(
             dimension_list,
